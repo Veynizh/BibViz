@@ -59,7 +59,6 @@ export default class Home extends React.Component {
     console.log(this.props.previousState);
     if (Object.keys(this.props.previousState).length === 0) {
       const authorsName = await this.getAuthors();
-      authorsName.push("Coleman, John");
       this.setState({ searchOption: authorsName });
     } else {
       this.setState(this.props.previousState);
@@ -83,6 +82,11 @@ export default class Home extends React.Component {
   onChangeText = (event) => {
     const { value } = event.target;
     this.setState({ search: value });
+  };
+  onKeyPressText = (event) => {
+    if (event.key === "Enter") {
+      this.refs.submit.click();
+    }
   };
   handleChangeMode = (event) => {
     const { value } = event.target;
@@ -535,6 +539,7 @@ export default class Home extends React.Component {
         value={search}
         options={searchOption}
         onChange={this.onChangeTextOption}
+        onKeyPress={this.onKeyPressText}
         renderInput={(params) => <TextField {...params} label="Search" />}
       />
     ) : mode == "Keyword-ID, Title" ? (
@@ -542,24 +547,26 @@ export default class Home extends React.Component {
         id="txt-search"
         value={search}
         onChange={this.onChangeText}
+        onKeyPress={this.onKeyPressText}
         label="Search"
       />
     ) : (
       // Author-Author
-      // <Autocomplete
-      //   id="txt-search"
-      //   debug
-      //   value={search}
-      //   options={searchOption}
-      //   onChange={this.onChangeTextOption}
-      //   renderInput={(params) => <TextField {...params} label="Search" />}
-      // />
-      <TextField
+      <Autocomplete
         id="txt-search"
+        debug
         value={search}
-        onChange={this.onChangeText}
-        label="Search"
+        options={searchOption}
+        onChange={this.onChangeTextOption}
+        onKeyPress={this.onKeyPressText}
+        renderInput={(params) => <TextField {...params} label="Search" />}
       />
+      // <TextField
+      //   id="txt-search"
+      //   value={search}
+      //   onChange={this.onChangeText}
+      //   label="Search"
+      // />
     );
   };
   renderChart = () => {
@@ -786,6 +793,7 @@ export default class Home extends React.Component {
             </TableContainer>
           </div>
           <Button
+            ref="submit"
             variant="outlined"
             id="submit-btn"
             // onClick={() =>
