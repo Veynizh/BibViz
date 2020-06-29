@@ -10,6 +10,7 @@ export default class App extends React.Component {
   state = {
     author: "",
     feild: "",
+    previousState: {},
   };
   setAuthor = (author) => {
     this.setState({ author });
@@ -17,8 +18,11 @@ export default class App extends React.Component {
   setField = (feild) => {
     this.setState({ feild });
   };
+  setPreviousState = (previousState) => {
+    this.setState({ previousState });
+  };
   render() {
-    const { author, feild} = this.state;
+    const { author, feild, previousState } = this.state;
     return (
       <BrowserRouter>
         <Switch>
@@ -26,7 +30,13 @@ export default class App extends React.Component {
             exact
             path="/"
             component={(props) => (
-              <Home {...props} setAuthor={this.setAuthor} setField={this.setField} />
+              <Home
+                {...props}
+                setAuthor={this.setAuthor}
+                setField={this.setField}
+                previousState={previousState}
+                setPreviousState={this.setPreviousState}
+              />
             )}
           />
           {/* exact เป็นการกันการชนของ path */}

@@ -23,9 +23,21 @@ export default class TablePage extends React.Component {
     const { author, feild } = this.props;
     console.log("AUTHOR:", author, "||", "FEILD:", feild);
     const table = await this.getBookByAuthorAndFeild(author, feild);
+    // const table = [
+    //   {
+    //     bookName: "a",
+    //     sumCount: "b",
+    //     MainPersonal: "c",
+    //     MainCorp: "",
+    //     AddedPersonal: ["a", "b"],
+    //     AddedCorp: "",
+    //     Year: "384290",
+    //   },
+    // ];
     // console.log("table", table);
     this.setState({ table });
   };
+  handleArrayToString = (arr) => arr.join("<br/>");
   getBookByAuthorAndFeild = (author, feild) =>
     new Promise((resolve, reject) => {
       const marc_tags = ["100", "110", "700", "710"];
@@ -36,14 +48,14 @@ export default class TablePage extends React.Component {
         feild
       );
 
-      const result = [];
-
       dbWithFeild.get().then((snapshot) => {
         console.log(snapshot);
         if (snapshot.empty) {
           console.log("No matching documents.");
           return;
         }
+
+        const result = [];
         // s.forEach((ss) => console.log(ss.data()));
         snapshot.docs.forEach((doc) => {
           const data = doc.data();
@@ -81,11 +93,12 @@ export default class TablePage extends React.Component {
               Year,
             });
           }
+          result.sort((a, b) => b["sumCount"] - a["sumCount"]);
+
+          console.log(data, result);
+
+          resolve(result);
         });
-
-        result.sort((a, b) => b["sumCount"] - a["sumCount"]);
-
-        resolve(result);
       });
 
       // const promises = marc_tags.map((marc_tag) =>
@@ -136,7 +149,12 @@ export default class TablePage extends React.Component {
       //   console.log("Error getting documents", err);
       // });
     });
-  defaultWithBlank = (txt) => (txt ? txt : "-");
+  defaultWithBlank = (input) =>
+    input
+      ? Array.isArray(input)
+        ? [].concat(...input.map((txt) => [txt, <br />]))
+        : input
+      : "-";
   render() {
     const { table } = this.state;
     return (
