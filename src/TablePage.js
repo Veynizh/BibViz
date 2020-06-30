@@ -95,8 +95,6 @@ export default class TablePage extends React.Component {
           }
           result.sort((a, b) => b["sumCount"] - a["sumCount"]);
 
-          console.log(data, result);
-
           resolve(result);
         });
       });
@@ -152,7 +150,7 @@ export default class TablePage extends React.Component {
   defaultWithBlank = (input) =>
     input
       ? Array.isArray(input)
-        ? [].concat(...input.map((txt) => [txt, <br />]))
+        ? [].concat(...input.map((txt) => ["- " + txt, <br />]))
         : input
       : "-";
   render() {
@@ -185,16 +183,16 @@ export default class TablePage extends React.Component {
                   <TableCell align="center">{index + 1}</TableCell>
                   <TableCell align="center">{row["bookName"]}</TableCell>
                   <TableCell align="center">{row["sumCount"]}</TableCell>
-                  <TableCell align="center">
+                  <TableCell align={row["MainPersonal"] ? "left" : "center"}>
                     {this.defaultWithBlank(row["MainPersonal"])}
                   </TableCell>
-                  <TableCell align="center">
+                  <TableCell align={row["MainCorp"] ? "left" : "center"}>
                     {this.defaultWithBlank(row["MainCorp"])}
                   </TableCell>
-                  <TableCell align="center">
+                  <TableCell align={row["AddedPersonal"] ? "left" : "center"}>
                     {this.defaultWithBlank(row["AddedPersonal"])}
                   </TableCell>
-                  <TableCell align="center">
+                  <TableCell align={row["AddedCorp"] ? "left" : "center"}>
                     {this.defaultWithBlank(row["AddedCorp"])}
                   </TableCell>
                   <TableCell align="center">

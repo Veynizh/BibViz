@@ -14,7 +14,7 @@ body {
 #left {
   display: flex;
   flex-direction: column;
-  width: 300px;
+  width: 20vw;
   height: 100vh;
   background-color: aqua;
   justify-content: space-evenly;
@@ -56,7 +56,7 @@ body {
   flex-direction: column;
   /* justify-content: space-between; */
   align-items: center;
-  width: 300px;
+  width: 20vw;
   height: 100vh;
   background-color: pink;
 }
@@ -74,4 +74,30 @@ body {
 
 #submit-btn {
   margin: 20px;
+}
+
+/* ------------------------------------------------------------ Modal  ------------------------------------------------------------ */
+
+#modal-container {
+  display: flex;
+  flex-direction: row;
+  width: 100vw;
+  height: 100vh;
+  justify-content: center;
+  align-items: center;
+}
+
+#background-alert {
+  display: flex;
+  min-width: 350px;
+  min-height: 200px;
+  justify-content: center;
+  align-items: center;
+}
+
+#treemap-tooltip {
+  background:#fd9; 
+  padding: 10px; 
+  border-style: solid;
+  border-radius: 10px;
 }

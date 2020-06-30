@@ -31,6 +31,8 @@ import * as d3 from "d3";
 import firebase from "./config/firebase";
 import { Chart } from "react-google-charts";
 import { RemoteChunkSize } from "papaparse";
+import ModalAlert from "./ModalAlert";
+import ModalLoading from "./ModalLoading";
 
 const db_main_table = firebase
   .firestore()
@@ -54,6 +56,9 @@ export default class Home extends React.Component {
     chartTitleX: "",
     chartTitleY: "",
     searchOption: [],
+    openModalAlert: false,
+    txtModalAlert: "",
+    loading: false,
   };
   componentDidMount = async () => {
     console.log(this.props.previousState);
@@ -64,6 +69,8 @@ export default class Home extends React.Component {
       this.setState(this.props.previousState);
     }
   };
+  closeModalAlert = () =>
+    this.setState({ openModalAlert: false }, () => console.log("aaa"));
   getAuthors = () =>
     new Promise((resolve, reject) => {
       db_keys_table.get().then((snapshot) => {
@@ -113,29 +120,37 @@ export default class Home extends React.Component {
       },
       callback
     );
-  onClickHistory = (mode, search) => {
-    this.setState({ mode, search }, () => {
-      this.onSubmit();
-    });
+  onClickHistory = (state) => {
+    this.setState({ loading: true }, () =>
+      this.setState(state, () => this.setState({ loading: false }))
+    );
   };
   saveHistory = (search) => {
     const { mode, history } = this.state;
-    history.push([mode, search].join(" - "));
-    this.setState({ history });
+    history.push({ key: [mode, search].join(" - "), state: this.state });
+    this.setState({ history, loading: false });
   };
   onSubmit = () => {
-    const { mode } = this.state;
-    if (mode == "Author-Field") {
-      this.processAuthorField();
-    } else if (mode == "Keyword-ID, Title") {
-      this.processKeyword();
-    } else {
-      this.processAuthorAuthor();
-    }
+    this.setState({ loading: true }, () => {
+      const { mode } = this.state;
+      if (mode == "Author-Field") {
+        this.processAuthorField();
+      } else if (mode == "Keyword-ID, Title") {
+        this.processKeyword();
+      } else {
+        this.processAuthorAuthor();
+      }
+    });
   };
   processAuthorField = async () => {
     const { search } = this.state;
-    this.saveHistory(search);
+    if (!this.state.searchOption.includes(search)) {
+      this.setState({
+        openModalAlert: true,
+        txtModalAlert: "Author Not Found.",
+      });
+      return;
+    }
 
     console.log("in process author-field");
 
@@ -167,7 +182,9 @@ export default class Home extends React.Component {
     const chartTitleX = "Frequency Reserve";
     const chartTitleY = "Frequency Genre";
 
-    this.setState({ chartData, chartTitle, chartTitleX, chartTitleY });
+    this.setState({ chartData, chartTitle, chartTitleX, chartTitleY }, () =>
+      this.saveHistory(search)
+    );
   };
   getFieldByAuthor = (author) =>
     new Promise((resolve, reject) => {
@@ -189,6 +206,10 @@ export default class Home extends React.Component {
         .then((snapshots) => {
           console.log(snapshots);
           if (snapshots.every((snapshot) => snapshot.empty)) {
+            this.setState({
+              openModalAlert: true,
+              txtModalAlert: "Author Not Found.",
+            });
             console.log("No matching documents.");
             return;
           }
@@ -253,13 +274,16 @@ export default class Home extends React.Component {
           resolve(resultWithTop);
         })
         .catch((err) => {
+          this.setState({
+            openModalAlert: true,
+            txtModalAlert: "Have some worng, please try again.",
+          });
           console.log("Error getting documents", err);
         }); // สำนักงานคณะกรรมการสิ่งแวดล้อมแห่งชาติ
     });
   processKeyword = async () => {
     const { search } = this.state;
     // const search = "frequency"; // telephone
-    this.saveHistory(search);
 
     const field_author = await this.getByKeyword(search);
     const chartData = [
@@ -267,9 +291,10 @@ export default class Home extends React.Component {
       [{ v: search + " header", f: search }, null, 0, 0],
     ];
     Object.keys(field_author).forEach((field) => {
-      chartData.push([field, search + " header", 0, 0]);
-      Object.keys(field_author[field]).forEach((author) => {
-        const { n_book, freq_reserve } = field_author[field][author];
+      const { n_book, freq_reserve, authors } = field_author[field];
+      chartData.push([field, search + " header", n_book, freq_reserve]);
+      Object.keys(authors).forEach((author) => {
+        const { n_book, freq_reserve } = field_author[field]['authors'][author];
         chartData.push([
           { v: author + field, f: author },
           field,
@@ -281,7 +306,7 @@ export default class Home extends React.Component {
 
     console.log(chartData);
 
-    this.setState({ chartData });
+    this.setState({ chartData }, () => this.saveHistory(search));
   };
   getByKeyword = (keyword) =>
     new Promise((resolve, reject) => {
@@ -293,33 +318,49 @@ export default class Home extends React.Component {
         .then((snapshot) => {
           console.log(snapshot);
           if (snapshot.empty) {
+            this.setState({
+              openModalAlert: true,
+              txtModalAlert: "Keyword Not Found.",
+            });
             console.log("No matching documents.");
             return;
           }
-          const field_author = {};
+
+          const doc_objs = {};
           snapshot.docs.forEach((doc) => {
+            doc_objs[doc.id] = doc;
+          });
+
+          const field_author = {};
+          Object.values(doc_objs).forEach((doc) => {
             const data = doc.data();
             console.log(data);
             if (!("marc" in data && "650" in data["marc"])) {
               return;
             }
+            const sumCount =
+              data["checkout"] + data["renew"] + data["internal"];
             const fields = [].concat(...Object.values(data["marc"]["650"]));
             const authors = [].concat(...Object.values(data["marc_tag"]));
             fields.forEach((field) => {
               if (!(field in field_author)) {
-                field_author[field] = {};
+                field_author[field] = {
+                  n_book: 0,
+                  freq_reserve: 0,
+                  authors: {},
+                };
               }
+              field_author[field]["n_book"] += 1;
+              field_author[field]["freq_reserve"] += sumCount;
               authors.forEach((author) => {
                 if (!(author in field_author[field])) {
-                  field_author[field][author] = {
+                  field_author[field]['authors'][author] = {
                     n_book: 0,
                     freq_reserve: 0,
                   };
                 }
-                const sumCount =
-                  data["checkout"] + data["renew"] + data["internal"];
-                field_author[field][author]["n_book"] += 1;
-                field_author[field][author]["freq_reserve"] += sumCount;
+                field_author[field]['authors'][author]["n_book"] += 1;
+                field_author[field]['authors'][author]["freq_reserve"] += sumCount;
               });
             });
             resolve(field_author);
@@ -330,7 +371,6 @@ export default class Home extends React.Component {
   processAuthorAuthor = async () => {
     const { search } = this.state;
     // const search = "frequency"; // telephone
-    this.saveHistory(search);
 
     const author_field = await this.getAuthorByAuthor(search);
     const chartData = [
@@ -352,7 +392,7 @@ export default class Home extends React.Component {
 
     console.log(chartData);
 
-    this.setState({ chartData });
+    this.setState({ chartData }, () => this.saveHistory(search));
   };
 
   getAuthorByAuthor = (author) =>
@@ -373,6 +413,10 @@ export default class Home extends React.Component {
       Promise.all(promises)
         .then((snapshots) => {
           if (snapshots.every((snapshot) => snapshot.empty)) {
+            this.setState({
+              openModalAlert: true,
+              txtModalAlert: "Author Not Found.",
+            });
             console.log("No matching documents with author.");
             return;
           }
@@ -441,6 +485,10 @@ export default class Home extends React.Component {
           Promise.all(promisefields).then((snapshots) => {
             console.log(snapshots);
             if (snapshots.every((snapshot) => snapshot.empty)) {
+              this.setState({
+                openModalAlert: true,
+                txtModalAlert: "Field Not Found.",
+              });
               console.log("No matching documents.");
               return;
             }
@@ -490,6 +538,10 @@ export default class Home extends React.Component {
           });
         })
         .catch((err) => {
+          this.setState({
+            openModalAlert: true,
+            txtModalAlert: "Have some worng, please try again.",
+          });
           console.log("Error getting documents", err);
         }); // สำนักงานคณะกรรมการสิ่งแวดล้อมแห่งชาติ
     });
@@ -577,7 +629,7 @@ export default class Home extends React.Component {
       chartTitleX,
       chartTitleY,
     } = this.state;
-    return mode == "Author-Field" ? (
+    return chartData.length == 0 ? null : mode == "Author-Field" ? (
       <Chart
         id="chart"
         // width={"600px"}
@@ -629,6 +681,7 @@ export default class Home extends React.Component {
       />
     ) : mode == "Keyword-ID, Title" ? (
       <Chart
+        key="Keyword-ID, Title"
         // id="chart"
         // width={"500px"}
         // height={"300px"}
@@ -644,6 +697,13 @@ export default class Home extends React.Component {
           headerHeight: 15,
           fontColor: "black",
           showScale: true,
+          generateTooltip: (row, size, value) => {
+            const target = chartData[row + 1];
+            const c = target[3];
+            return typeof target[0] === "object"
+              ? `<div id="treemap-tooltip">author: ${target[0]["f"]}<br/>number of book: ${size}<br/>freq of reserve:${c}</div>`
+              : `<div id="treemap-tooltip">field: ${target[0]}<br/>number of book: ${size}<br/>freq of reserve:${c}</div>`;
+          },
         }}
         rootProps={{ "data-testid": "1" }}
         chartEvents={[
@@ -670,6 +730,7 @@ export default class Home extends React.Component {
     ) : (
       // Author-Author
       <Chart
+        key="Author-Author"
         // id="chart"
         // width={"500px"}
         // height={"300px"}
@@ -711,7 +772,14 @@ export default class Home extends React.Component {
     );
   };
   render() {
-    const { mode, result, history } = this.state;
+    const {
+      mode,
+      result,
+      history,
+      openModalAlert,
+      txtModalAlert,
+      loading,
+    } = this.state;
     return (
       <div id="container">
         <div id="left">
@@ -752,14 +820,13 @@ export default class Home extends React.Component {
             <CardContent>
               <List>
                 {history.map((item, index) => {
-                  const mode = item.split(" - ")[0];
-                  const search = item.split(" - ")[1];
+                  const { key, state } = item;
                   return (
                     <ListItem key={index} button>
                       <ListItemText
-                        onClick={() => this.onClickHistory(mode, search)}
+                        onClick={() => this.onClickHistory(state)}
                         style={{ color: "red" }}
-                        primary={item}
+                        primary={key}
                       />
                       {/* <ListItemText primary={search} /> */}
                     </ListItem>
@@ -804,6 +871,12 @@ export default class Home extends React.Component {
             Submit
           </Button>
         </div>
+        <ModalAlert
+          closeModal={this.closeModalAlert}
+          open={openModalAlert}
+          text={txtModalAlert}
+        />
+        <ModalLoading loading={loading} />
       </div>
     );
   }
