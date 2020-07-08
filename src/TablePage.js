@@ -1,6 +1,5 @@
 import React from "react";
 import {
-  TextField,
   Table,
   TableBody,
   TableCell,
@@ -20,9 +19,10 @@ export default class TablePage extends React.Component {
     table: [],
   };
   componentDidMount = async () => {
-    const { author, feild } = this.props;
-    console.log("AUTHOR:", author, "||", "FEILD:", feild);
-    const table = await this.getBookByAuthorAndFeild(author, feild);
+    const { bookData } = this.props;
+    // console.log("AUTHOR:", author, "||", "FEILD:", feild);
+    // const table = await this.getBookByAuthorAndFeild(author, feild);
+    const table = this.getBook(bookData);
     // const table = [
     //   {
     //     bookName: "a",
@@ -147,6 +147,39 @@ export default class TablePage extends React.Component {
       //   console.log("Error getting documents", err);
       // });
     });
+  getBook = (bookData) => {
+    const result = bookData
+      .map((data) => {
+        // console.log(data);
+        console.log(data);
+
+        const bookName =
+          Object.keys(data).includes("marc") &&
+          Object.keys(data["marc"]).includes("245")
+            ? data["marc"]["245"][0]
+            : "-";
+        const MainPersonal = data["marc_tag"]["100"];
+        const MainCorp = data["marc_tag"]["110"];
+        const AddedPersonal = data["marc_tag"]["700"];
+        const AddedCorp = data["marc_tag"]["710"];
+        const Year = data["years"];
+
+        const sumCount = data["checkout"] + data["renew"] + data["internal"];
+
+        return {
+          bookName,
+          sumCount,
+          MainPersonal,
+          MainCorp,
+          AddedPersonal,
+          AddedCorp,
+          Year,
+        };
+      })
+      .sort((a, b) => b["sumCount"] - a["sumCount"]);
+
+    return result;
+  };
   defaultWithBlank = (input) =>
     input
       ? Array.isArray(input)

@@ -10,6 +10,7 @@ export default class App extends React.Component {
   state = {
     author: "",
     feild: "",
+    bookData: [],
     previousState: {},
   };
   setAuthor = (author) => {
@@ -18,11 +19,14 @@ export default class App extends React.Component {
   setField = (feild) => {
     this.setState({ feild });
   };
+  setBookData = (bookData) => {
+    this.setState({ bookData });
+  };
   setPreviousState = (previousState) => {
     this.setState({ previousState });
   };
   render() {
-    const { author, feild, previousState } = this.state;
+    const { author, feild, bookData, previousState } = this.state;
     return (
       <BrowserRouter>
         <Switch>
@@ -34,6 +38,7 @@ export default class App extends React.Component {
                 {...props}
                 setAuthor={this.setAuthor}
                 setField={this.setField}
+                setBookData={this.setBookData}
                 previousState={previousState}
                 setPreviousState={this.setPreviousState}
               />
@@ -46,7 +51,12 @@ export default class App extends React.Component {
             exact
             path="/table"
             component={(props) => (
-              <Table {...props} author={author} feild={feild} />
+              <Table
+                {...props}
+                author={author}
+                feild={feild}
+                bookData={bookData}
+              />
             )}
           />
         </Switch>

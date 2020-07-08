@@ -19,7 +19,9 @@ import {
   ListItemText,
   Button,
 } from "@material-ui/core";
-import Autocomplete from "@material-ui/lab/Autocomplete";
+import Autocomplete, {
+  createFilterOptions,
+} from "@material-ui/lab/Autocomplete";
 import Box from "@material-ui/core/utils";
 import readXlsxFile from "read-excel-file";
 // import Papa from 'papaparse'
@@ -33,6 +35,10 @@ import { Chart } from "react-google-charts";
 import { RemoteChunkSize } from "papaparse";
 import ModalAlert from "./ModalAlert";
 import ModalLoading from "./ModalLoading";
+
+const filterOptions = createFilterOptions({
+  limit: 100,
+});
 
 const db_main_table = firebase
   .firestore()
@@ -55,6 +61,7 @@ export default class Home extends React.Component {
     chartTitle: "",
     chartTitleX: "",
     chartTitleY: "",
+    bookData: [],
     searchOption: [],
     openModalAlert: false,
     txtModalAlert: "",
@@ -121,13 +128,14 @@ export default class Home extends React.Component {
       callback
     );
   onClickHistory = (state) => {
-    this.setState({ loading: true }, () =>
-      this.setState(state, () => this.setState({ loading: false }))
-    );
+    this.setState(state);
   };
   saveHistory = (search) => {
     const { mode, history } = this.state;
-    history.push({ key: [mode, search].join(" - "), state: this.state });
+    history.push({
+      key: [mode, search].join(" - "),
+      state: { ...this.state, loading: false },
+    });
     this.setState({ history, loading: false });
   };
   onSubmit = () => {
@@ -146,6 +154,7 @@ export default class Home extends React.Component {
     const { search } = this.state;
     if (!this.state.searchOption.includes(search)) {
       this.setState({
+        loading: false,
         openModalAlert: true,
         txtModalAlert: "Author Not Found.",
       });
@@ -155,35 +164,38 @@ export default class Home extends React.Component {
     console.log("in process author-field");
 
     const fields = await this.getFieldByAuthor(search);
-    const chartData = fields.map((obj) => [
-      obj["freq_reserve"],
-      obj["freq_genre"],
-      "o",
-      obj["fieldName"],
-    ]);
-    chartData.unshift([
-      "",
-      "",
-      {
-        role: "annotation",
-        type: "string",
-      },
-      {
-        role: "annotationText",
-        type: "string",
-      },
-    ]);
-
-    console.log("finish cal chart data");
-
-    console.log(chartData);
+    const chartData = [
+      [
+        "",
+        "",
+        {
+          role: "annotation",
+          type: "string",
+        },
+        {
+          role: "annotationText",
+          type: "string",
+        },
+      ],
+    ];
+    const bookData = [];
+    fields.forEach((obj) => {
+      chartData.push([
+        obj["freq_reserve"],
+        obj["freq_genre"],
+        "o",
+        obj["fieldName"],
+      ]);
+      bookData.push(obj["bookData"]);
+    });
 
     const chartTitle = search + " Fields";
     const chartTitleX = "Frequency Reserve";
     const chartTitleY = "Frequency Genre";
 
-    this.setState({ chartData, chartTitle, chartTitleX, chartTitleY }, () =>
-      this.saveHistory(search)
+    this.setState(
+      { chartData, chartTitle, chartTitleX, chartTitleY, bookData },
+      () => this.saveHistory(search)
     );
   };
   getFieldByAuthor = (author) =>
@@ -207,6 +219,7 @@ export default class Home extends React.Component {
           console.log(snapshots);
           if (snapshots.every((snapshot) => snapshot.empty)) {
             this.setState({
+              loading: false,
               openModalAlert: true,
               txtModalAlert: "Author Not Found.",
             });
@@ -232,10 +245,19 @@ export default class Home extends React.Component {
               "marc" in data && "650" in data["marc"]
                 ? data["marc"]["650"] || []
                 : [];
-            const bookName =
-              "marc" in data && "245" in data["marc"]
-                ? data["marc"]["245"][0]
-                : "-";
+            // const bookName =
+            //   "marc" in data && "245" in data["marc"]
+            //     ? data["marc"]["245"][0]
+            //     : "-";
+
+            if (fieldNames.length == 0) {
+              this.setState({
+                loading: false,
+                openModalAlert: true,
+                txtModalAlert: "Field Not Found.",
+              });
+              return;
+            }
 
             const sumCount =
               doc.data()["checkout"] +
@@ -252,7 +274,8 @@ export default class Home extends React.Component {
               }
 
               result[fieldName]["detail"].push({
-                bookName,
+                data,
+                // bookName,
                 freq: sumCount,
               });
               result[fieldName]["freq_genre"] += 1;
@@ -268,6 +291,7 @@ export default class Home extends React.Component {
                 .slice(0, 3),
               freq_genre: field["freq_genre"],
               freq_reserve: field["freq_reserve"],
+              bookData: field["detail"].map((d) => d["data"]),
               fieldName,
             };
           });
@@ -275,6 +299,7 @@ export default class Home extends React.Component {
         })
         .catch((err) => {
           this.setState({
+            loading: false,
             openModalAlert: true,
             txtModalAlert: "Have some worng, please try again.",
           });
@@ -290,23 +315,26 @@ export default class Home extends React.Component {
       ["Author", "Parent", "number of book", "frequency of reserve"],
       [{ v: search + " header", f: search }, null, 0, 0],
     ];
+    const bookData = [["a header " + search]];
     Object.keys(field_author).forEach((field) => {
       const { n_book, freq_reserve, authors } = field_author[field];
       chartData.push([field, search + " header", n_book, freq_reserve]);
+      bookData.push(["a field " + field]);
       Object.keys(authors).forEach((author) => {
-        const { n_book, freq_reserve } = field_author[field]['authors'][author];
+        const { n_book, freq_reserve, data } = field_author[field]["authors"][
+          author
+        ];
         chartData.push([
           { v: author + field, f: author },
           field,
           n_book,
           freq_reserve,
         ]);
+        bookData.push(data);
       });
     });
 
-    console.log(chartData);
-
-    this.setState({ chartData }, () => this.saveHistory(search));
+    this.setState({ chartData, bookData }, () => this.saveHistory(search));
   };
   getByKeyword = (keyword) =>
     new Promise((resolve, reject) => {
@@ -319,6 +347,7 @@ export default class Home extends React.Component {
           console.log(snapshot);
           if (snapshot.empty) {
             this.setState({
+              loading: false,
               openModalAlert: true,
               txtModalAlert: "Keyword Not Found.",
             });
@@ -334,7 +363,6 @@ export default class Home extends React.Component {
           const field_author = {};
           Object.values(doc_objs).forEach((doc) => {
             const data = doc.data();
-            console.log(data);
             if (!("marc" in data && "650" in data["marc"])) {
               return;
             }
@@ -354,13 +382,17 @@ export default class Home extends React.Component {
               field_author[field]["freq_reserve"] += sumCount;
               authors.forEach((author) => {
                 if (!(author in field_author[field])) {
-                  field_author[field]['authors'][author] = {
+                  field_author[field]["authors"][author] = {
+                    data: [],
                     n_book: 0,
                     freq_reserve: 0,
                   };
                 }
-                field_author[field]['authors'][author]["n_book"] += 1;
-                field_author[field]['authors'][author]["freq_reserve"] += sumCount;
+                field_author[field]["authors"][author]["data"].push(data);
+                field_author[field]["authors"][author]["n_book"] += 1;
+                field_author[field]["authors"][author][
+                  "freq_reserve"
+                ] += sumCount;
               });
             });
             resolve(field_author);
@@ -377,22 +409,26 @@ export default class Home extends React.Component {
       ["Field", "Parent", "number of book", "frequency of reserve"],
       [{ v: search + " header", f: search }, null, 0, 0],
     ];
+    const bookData = [["a header " + search]];
     Object.keys(author_field).forEach((author) => {
-      chartData.push([author, search + " header", 0, 0]);
-      Object.keys(author_field[author]).forEach((field) => {
-        const { n_book, freq_reserve } = author_field[author][field];
+      const { n_book, freq_reserve, fields } = author_field[author];
+      chartData.push([author, search + " header", n_book, freq_reserve]);
+      bookData.push(["a field " + author]);
+      Object.keys(fields).forEach((field) => {
+        const { n_book, freq_reserve, data } = author_field[author]["fields"][
+          field
+        ];
         chartData.push([
           { v: field + author, f: field },
           author,
           n_book,
           freq_reserve,
         ]);
+        bookData.push(data);
       });
     });
 
-    console.log(chartData);
-
-    this.setState({ chartData }, () => this.saveHistory(search));
+    this.setState({ chartData, bookData }, () => this.saveHistory(search));
   };
 
   getAuthorByAuthor = (author) =>
@@ -414,6 +450,7 @@ export default class Home extends React.Component {
         .then((snapshots) => {
           if (snapshots.every((snapshot) => snapshot.empty)) {
             this.setState({
+              loading: false,
               openModalAlert: true,
               txtModalAlert: "Author Not Found.",
             });
@@ -477,15 +514,11 @@ export default class Home extends React.Component {
             );
           }
 
-          console.log(fields);
-          console.log(promisefields);
-
-          console.log(author, "has field", promisefields.length);
-
           Promise.all(promisefields).then((snapshots) => {
             console.log(snapshots);
             if (snapshots.every((snapshot) => snapshot.empty)) {
               this.setState({
+                loading: false,
                 openModalAlert: true,
                 txtModalAlert: "Field Not Found.",
               });
@@ -500,6 +533,7 @@ export default class Home extends React.Component {
                 doc_objs[doc.id] = doc;
               });
             });
+
             const result = {};
             Object.values(doc_objs).forEach((docByField) => {
               const dataByField = docByField.data();
@@ -512,33 +546,51 @@ export default class Home extends React.Component {
                   authorNames.push(authorName);
                 });
               });
-              const authorFields = dataByField["marc"]["650"];
+              // const authorFields = dataByField["marc"]["650"];
+              const authorFields = dataByField["marc"]["650"].filter((d) =>
+                fields.includes(d)
+              );
+              if (authorFields.length == 0) {
+                return;
+              }
               const sumCount =
                 dataByField["checkout"] +
                 dataByField["renew"] +
                 dataByField["internal"];
               authorNames.forEach((author) => {
                 if (!(author in result)) {
-                  result[author] = {};
+                  result[author] = {
+                    n_book: 0,
+                    freq_reserve: 0,
+                    fields: {},
+                  };
                 }
+                result[author]["n_book"] += 1;
+                result[author]["freq_reserve"] += sumCount;
+
                 authorFields.forEach((field) => {
-                  if (!(field in result[author])) {
-                    result[author][field] = {
+                  if (!(field in result[author]["fields"])) {
+                    result[author]["fields"][field] = {
+                      data: [],
                       n_book: 0,
                       freq_reserve: 0,
                     };
                   }
-                  result[author][field]["n_book"] += 1;
-                  result[author][field]["freq_reserve"] += sumCount;
+                  result[author]["fields"][field]["data"].push(dataByField);
+                  result[author]["fields"][field]["n_book"] += 1;
+                  result[author]["fields"][field]["freq_reserve"] += sumCount;
+                  if (field == "เด็ก") {
+                    console.log("dd", dataByField);
+                  }
                 });
               });
-              console.log(result);
-              resolve(result);
             });
+            resolve(result);
           });
         })
         .catch((err) => {
           this.setState({
+            loading: false,
             openModalAlert: true,
             txtModalAlert: "Have some worng, please try again.",
           });
@@ -590,6 +642,7 @@ export default class Home extends React.Component {
         debug
         value={search}
         options={searchOption}
+        filterOptions={filterOptions}
         onChange={this.onChangeTextOption}
         onKeyPress={this.onKeyPressText}
         renderInput={(params) => <TextField {...params} label="Search" />}
@@ -609,6 +662,7 @@ export default class Home extends React.Component {
         debug
         value={search}
         options={searchOption}
+        filterOptions={filterOptions}
         onChange={this.onChangeTextOption}
         onKeyPress={this.onKeyPressText}
         renderInput={(params) => <TextField {...params} label="Search" />}
@@ -625,10 +679,12 @@ export default class Home extends React.Component {
     const {
       mode,
       chartData,
+      bookData,
       chartTitle,
       chartTitleX,
       chartTitleY,
     } = this.state;
+    console.log(chartData);
     return chartData.length == 0 ? null : mode == "Author-Field" ? (
       <Chart
         id="chart"
@@ -667,9 +723,10 @@ export default class Home extends React.Component {
                 const { search } = this.state;
                 const [selectedItem] = selection;
                 const dataTable = chartWrapper.getDataTable();
-                const { setAuthor, setField, setPreviousState } = this.props;
-                setAuthor(search);
-                setField(chartData[selectedItem["row"] + 1][3]);
+                const { setBookData, setPreviousState } = this.props;
+                setBookData(bookData[selectedItem["row"]]);
+                // setAuthor(search);
+                // setField(chartData[selectedItem["row"] + 1][3]);
                 // console.log(this.props.history);
                 setPreviousState(this.state);
                 this.props.history.push("/table");
@@ -701,8 +758,8 @@ export default class Home extends React.Component {
             const target = chartData[row + 1];
             const c = target[3];
             return typeof target[0] === "object"
-              ? `<div id="treemap-tooltip">author: ${target[0]["f"]}<br/>number of book: ${size}<br/>freq of reserve:${c}</div>`
-              : `<div id="treemap-tooltip">field: ${target[0]}<br/>number of book: ${size}<br/>freq of reserve:${c}</div>`;
+              ? `<div id="treemap-tooltip">author: ${target[0]["f"]}<br/>number of book: ${size}<br/>freq of reserve: ${c}</div>`
+              : `<div id="treemap-tooltip">field: ${target[0]}<br/>number of book: ${size}<br/>freq of reserve: ${c}</div>`;
           },
         }}
         rootProps={{ "data-testid": "1" }}
@@ -715,11 +772,12 @@ export default class Home extends React.Component {
               const [selectedItem] = selection;
               const target = chartData[selectedItem["row"] + 1];
               if (typeof target[0] === "object" && selectedItem["row"] != 0) {
-                const author = target[0]["f"];
-                const field = target[1];
-                const { setAuthor, setField, setPreviousState } = this.props;
-                setAuthor(author);
-                setField(field);
+                // const author = target[0]["f"];
+                // const field = target[1];
+                const { setBookData, setPreviousState } = this.props;
+                setBookData(bookData[selectedItem["row"]]);
+                // setAuthor(author);
+                // setField(field);
                 setPreviousState(this.state);
                 this.props.history.push("/table");
               }
@@ -746,6 +804,13 @@ export default class Home extends React.Component {
           headerHeight: 15,
           fontColor: "black",
           showScale: true,
+          generateTooltip: (row, size, value) => {
+            const target = chartData[row + 1];
+            const c = target[3];
+            return typeof target[0] === "object"
+              ? `<div id="treemap-tooltip">field: ${target[0]["f"]}<br/>number of book: ${size}<br/>freq of reserve: ${c}</div>`
+              : `<div id="treemap-tooltip">author: ${target[1]}<br/>number of book: ${size}<br/>freq of reserve: ${c}</div>`;
+          },
         }}
         rootProps={{ "data-testid": "1" }}
         chartEvents={[
@@ -757,11 +822,12 @@ export default class Home extends React.Component {
               const [selectedItem] = selection;
               const target = chartData[selectedItem["row"] + 1];
               if (typeof target[0] === "object" && selectedItem["row"] != 0) {
-                const author = target[1];
-                const field = target[0]["f"];
-                const { setAuthor, setField, setPreviousState } = this.props;
-                setAuthor(author);
-                setField(field);
+                // const author = target[1];
+                // const field = target[0]["f"];
+                const { setBookData, setPreviousState } = this.props;
+                setBookData(bookData[selectedItem["row"]]);
+                // setAuthor(author);
+                // setField(field);
                 setPreviousState(this.state);
                 this.props.history.push("/table");
               }
