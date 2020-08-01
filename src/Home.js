@@ -58,9 +58,6 @@ export default class Home extends React.Component {
       // "Author-Author - KMITL",
     ],
     chartData: [],
-    chartTitle: "",
-    chartTitleX: "",
-    chartTitleY: "",
     bookData: [],
     searchOption: [],
     openModalAlert: false,
@@ -121,9 +118,6 @@ export default class Home extends React.Component {
       {
         search: "",
         chartData: [],
-        chartTitle: "",
-        chartTitleX: "",
-        chartTitleY: "",
       },
       callback
     );
@@ -163,40 +157,124 @@ export default class Home extends React.Component {
 
     console.log("in process author-field");
 
-    const fields = await this.getFieldByAuthor(search);
+    const bookNames = await this.getFieldByAuthor(search);
     const chartData = [
       [
-        "",
-        "",
-        {
-          role: "annotation",
-          type: "string",
-        },
-        {
-          role: "annotationText",
-          type: "string",
-        },
+        { type: "string", id: "Field" },
+        { type: "string", id: "dummy bar label" },
+        { type: "string", role: "tooltip", p: { html: true } },
+        { type: "date", id: "Start" },
+        { type: "date", id: "End" },
       ],
     ];
-    const bookData = [];
-    fields.forEach((obj) => {
+    const bookData = [["header"]];
+    // Object.keys(fields).forEach((field) => {
+    //   Object.keys(fields[field]).forEach((yearKey) => {
+    //     const { data, freq_genre, freq_reserve } = fields[field][yearKey];
+    //     const [start, end] = yearKey.split("-");
+    //     chartData.push([field, new Date(start, 0, 0), new Date(end, 0, 0)]);
+    //     bookData.push(data);
+    //   });
+    // });
+
+    Object.keys(bookNames).forEach((name) => {
+      const { yearKey, fieldNames } = bookNames[name];
+      const [start, end] = yearKey.split("-");
+      console.log(yearKey, start, end);
+      bookData.push(fieldNames);
       chartData.push([
-        obj["freq_reserve"],
-        obj["freq_genre"],
-        "o",
-        obj["fieldName"],
+        name,
+        null,
+        `<div id="treemap-tooltip"><b>fields:</b> - ${fieldNames.join('<br/>&emsp;&emsp;&emsp;- ')}<br/><b>years:</b> ${
+          start == end ? start : yearKey
+        }</div>`,
+        new Date(start, 0, 1),
+        new Date(end, 0, 2),
       ]);
-      bookData.push(obj["bookData"]);
     });
 
-    const chartTitle = search + " Fields";
-    const chartTitleX = "Frequency Reserve";
-    const chartTitleY = "Frequency Genre";
+    this.setState({ chartData, bookData }, () => this.saveHistory(search));
+  };
+  getYear = (candidate) => {
+    const selected = [];
+    candidate.forEach((item) => {
+      if (item.length > 5) {
+        // code block
+      } else {
+        let digit = item.replace(/[-]/g, "");
+        switch (digit.length) {
+          case 2:
+            selected.push(parseInt(digit + "00"));
+            selected.push(parseInt(digit + "99"));
+            break;
+          case 3:
+            selected.push(parseInt(digit + "0"));
+            selected.push(parseInt(digit + "9"));
+            break;
+          case 4:
+            selected.push(parseInt(digit));
+            break;
+        }
+      }
+    });
+    return selected;
+  };
+  getYearKey = (year) => {
+    const delimiter = [",", " "];
 
-    this.setState(
-      { chartData, chartTitle, chartTitleX, chartTitleY, bookData },
-      () => this.saveHistory(search)
-    );
+    let splited = [year];
+    delimiter.forEach((d) => {
+      splited = [].concat.apply(
+        [],
+        splited.map((item) => item.split(d))
+      );
+    });
+
+    console.log("split", splited);
+
+    let candidate = [];
+    const copyRightSet = [];
+    splited.forEach((item) => {
+      const temp_item = item
+        .replace(/[_?]/g, "-")
+        .replace(/[^\d-©]/g, "")
+        .trim();
+      if (temp_item != "") {
+        if (temp_item.slice(0, 1) == "©") {
+          copyRightSet.push(temp_item.slice(1));
+        } else {
+          candidate.push(temp_item);
+        }
+      }
+    });
+
+    console.log("split cc", candidate, copyRightSet);
+
+    let selected = this.getYear(candidate);
+
+    console.log("selected", selected);
+
+    if (selected.length == 0) {
+      selected = this.getYear(copyRightSet);
+    }
+
+    console.log("selected", selected);
+    let min_year = Math.min(...selected).toString();
+    let max_year = Math.max(...selected).toString();
+
+    min_year =
+      parseInt(min_year.substring(0, 2)) > 21
+        ? (parseInt(min_year) - 543).toString()
+        : min_year;
+    max_year =
+      parseInt(max_year.substring(0, 2)) > 21
+        ? (parseInt(max_year) - 543).toString()
+        : max_year;
+
+    min_year = Math.min(parseInt(min_year), 2020).toString();
+    max_year = Math.min(parseInt(max_year), 2020).toString();
+
+    return [min_year, max_year].join("-");
   };
   getFieldByAuthor = (author) =>
     new Promise((resolve, reject) => {
@@ -240,6 +318,14 @@ export default class Home extends React.Component {
             // console.log(doc.id, "=>", doc.data());
 
             const data = doc.data();
+            const bookName =
+              "marc" in data && "245" in data["marc"]
+                ? data["marc"]["245"][0]
+                : "-";
+
+            if (!data["years"]) {
+              return;
+            }
 
             const fieldNames =
               "marc" in data && "650" in data["marc"]
@@ -251,51 +337,44 @@ export default class Home extends React.Component {
             //     : "-";
 
             if (fieldNames.length == 0) {
-              this.setState({
-                loading: false,
-                openModalAlert: true,
-                txtModalAlert: "Field Not Found.",
-              });
+              // this.setState({
+              //   loading: false,
+              //   openModalAlert: true,
+              //   txtModalAlert: "Field Not Found.",
+              // });
               return;
             }
+
+            console.log("year", data["years"]);
+            const yearKey = this.getYearKey(data["years"]);
+            console.log("year", yearKey);
 
             const sumCount =
               doc.data()["checkout"] +
               doc.data()["renew"] +
               doc.data()["internal"];
 
-            fieldNames.forEach((fieldName) => {
-              if (!Object.keys(result).includes(fieldName)) {
-                result[fieldName] = {
-                  detail: [],
-                  freq_genre: 0,
-                  freq_reserve: 0,
-                };
-              }
-
-              result[fieldName]["detail"].push({
-                data,
-                // bookName,
-                freq: sumCount,
-              });
-              result[fieldName]["freq_genre"] += 1;
-              result[fieldName]["freq_reserve"] += sumCount;
-            });
-          });
-
-          const resultWithTop = Object.keys(result).map((fieldName) => {
-            const field = result[fieldName];
-            return {
-              book_top_three: field["detail"]
-                .sort((a, b) => a.freq - b.freq)
-                .slice(0, 3),
-              freq_genre: field["freq_genre"],
-              freq_reserve: field["freq_reserve"],
-              bookData: field["detail"].map((d) => d["data"]),
-              fieldName,
+            // fieldNames.forEach((fieldName) => {
+            //   if (!Object.keys(result).includes(fieldName)) {
+            //     result[fieldName] = {};
+            //   }
+            //   if (!Object.keys(result[fieldName]).includes(yearKey)) {
+            //     result[fieldName][yearKey] = {
+            //       data: [],
+            //       freq_genre: 0,
+            //       freq_reserve: 0,
+            //     };
+            //   }
+            //   result[fieldName][yearKey]["data"].push(data);
+            //   result[fieldName][yearKey]["freq_genre"] += 1;
+            //   result[fieldName][yearKey]["freq_reserve"] += sumCount;
+            // });
+            result[bookName] = {
+              yearKey,
+              fieldNames,
             };
           });
-          resolve(resultWithTop);
+          resolve(result);
         })
         .catch((err) => {
           this.setState({
@@ -317,7 +396,7 @@ export default class Home extends React.Component {
     ];
     const bookData = [["a header " + search]];
     Object.keys(field_author).forEach((field) => {
-      const { n_book, freq_reserve, authors } = field_author[field];
+      const { n_book, books_id, freq_reserve, authors } = field_author[field];
       chartData.push([field, search + " header", n_book, freq_reserve]);
       bookData.push(["a field " + field]);
       Object.keys(authors).forEach((author) => {
@@ -676,65 +755,72 @@ export default class Home extends React.Component {
     );
   };
   renderChart = () => {
-    const {
-      mode,
-      chartData,
-      bookData,
-      chartTitle,
-      chartTitleX,
-      chartTitleY,
-    } = this.state;
+    const { mode, chartData, bookData } = this.state;
     console.log(chartData);
     return chartData.length == 0 ? null : mode == "Author-Field" ? (
+      // <Chart
+      //   id="chart"
+      //   // width={"600px"}
+      //   height={"100vh"}
+      //   chartType="ScatterChart"
+      //   loader={<div>Loading Chart</div>}
+      //   data={chartData}
+      //   options={{
+      //     title: chartTitle,
+      //     hAxis: {
+      //       title: chartTitleX,
+      //       maxValue: Math.max(...chartData.slice(1).map((d) => d[0])) + 1,
+      //     },
+      //     vAxis: {
+      //       title: chartTitleY,
+      //       maxValue: Math.max(...chartData.slice(1).map((d) => d[1])) + 1,
+      //       minValue: Math.min(...chartData.slice(1).map((d) => d[1])) - 1,
+      //     },
+      //     explorer: {
+      //       axis: "horizontal",
+      //       keepInBounds: false,
+      //       maxZoomIn: 1000,
+      //       zoomDelta: 0.9,
+      //     },
+      //     legend: "none",
+      //   }}
+      //   rootProps={{ "data-testid": "1" }}
+      //   chartEvents={[
+      //     {
+      //       eventName: "select",
+      //       callback: ({ chartWrapper }) => {
+      //         const chart = chartWrapper.getChart();
+      //         const selection = chart.getSelection();
+      //         if (selection.length === 1) {
+      //           const { search } = this.state;
+      //           const [selectedItem] = selection;
+      //           const dataTable = chartWrapper.getDataTable();
+      //           const { setBookData, setPreviousState } = this.props;
+      //           setBookData(bookData[selectedItem["row"]]);
+      //           // setAuthor(search);
+      //           // setField(chartData[selectedItem["row"] + 1][3]);
+      //           // console.log(this.props.history);
+      //           setPreviousState(this.state);
+      //           this.props.history.push("/table");
+      //         }
+      //         console.log(selection);
+      //       },
+      //     },
+      //   ]}
+      // />
       <Chart
         id="chart"
-        // width={"600px"}
         height={"100vh"}
-        chartType="ScatterChart"
+        chartType="Timeline"
         loader={<div>Loading Chart</div>}
         data={chartData}
-        options={{
-          title: chartTitle,
-          hAxis: {
-            title: chartTitleX,
-            maxValue: Math.max(...chartData.slice(1).map((d) => d[0])) + 1,
-          },
-          vAxis: {
-            title: chartTitleY,
-            maxValue: Math.max(...chartData.slice(1).map((d) => d[1])) + 1,
-            minValue: Math.min(...chartData.slice(1).map((d) => d[1])) - 1,
-          },
-          explorer: {
-            axis: "horizontal",
-            keepInBounds: false,
-            maxZoomIn: 1000,
-            zoomDelta: 0.9,
-          },
-          legend: "none",
-        }}
         rootProps={{ "data-testid": "1" }}
-        chartEvents={[
-          {
-            eventName: "select",
-            callback: ({ chartWrapper }) => {
-              const chart = chartWrapper.getChart();
-              const selection = chart.getSelection();
-              if (selection.length === 1) {
-                const { search } = this.state;
-                const [selectedItem] = selection;
-                const dataTable = chartWrapper.getDataTable();
-                const { setBookData, setPreviousState } = this.props;
-                setBookData(bookData[selectedItem["row"]]);
-                // setAuthor(search);
-                // setField(chartData[selectedItem["row"] + 1][3]);
-                // console.log(this.props.history);
-                setPreviousState(this.state);
-                this.props.history.push("/table");
-              }
-              console.log(selection);
-            },
+        options={{
+          hAxis: {
+            minValue: new Date(1900, 0, 1),
+            maxValue: new Date(2021, 0, 1),
           },
-        ]}
+        }}
       />
     ) : mode == "Keyword-ID, Title" ? (
       <Chart
@@ -754,12 +840,13 @@ export default class Home extends React.Component {
           headerHeight: 15,
           fontColor: "black",
           showScale: true,
-          generateTooltip: (row, size, value) => {
+          generateTooltip: (row) => {
             const target = chartData[row + 1];
+            const n = target[2];
             const c = target[3];
             return typeof target[0] === "object"
-              ? `<div id="treemap-tooltip">author: ${target[0]["f"]}<br/>number of book: ${size}<br/>freq of reserve: ${c}</div>`
-              : `<div id="treemap-tooltip">field: ${target[0]}<br/>number of book: ${size}<br/>freq of reserve: ${c}</div>`;
+              ? `<div id="treemap-tooltip"><b>author:</b> ${target[0]["f"]}<br/>number of book: ${n}<br/><b>freq of reserve:</b> ${c}</div>`
+              : `<div id="treemap-tooltip"><b>field:</b> ${target[0]}<br/>number of book: ${n}<br/><b>freq of reserve:</b> ${c}</div>`;
           },
         }}
         rootProps={{ "data-testid": "1" }}
@@ -804,12 +891,13 @@ export default class Home extends React.Component {
           headerHeight: 15,
           fontColor: "black",
           showScale: true,
-          generateTooltip: (row, size, value) => {
+          generateTooltip: (row) => {
             const target = chartData[row + 1];
+            const n = target[2];
             const c = target[3];
             return typeof target[0] === "object"
-              ? `<div id="treemap-tooltip">field: ${target[0]["f"]}<br/>number of book: ${size}<br/>freq of reserve: ${c}</div>`
-              : `<div id="treemap-tooltip">author: ${target[1]}<br/>number of book: ${size}<br/>freq of reserve: ${c}</div>`;
+              ? `<div id="treemap-tooltip"><b>field:</b> ${target[0]["f"]}<br/>number of book: ${n}<br/><b>freq of reserve:</b> ${c}</div>`
+              : `<div id="treemap-tooltip"><b>author:</b> ${target[1]}<br/>number of book: ${n}<br/><b>freq of reserve:</b> ${c}</div>`;
           },
         }}
         rootProps={{ "data-testid": "1" }}
