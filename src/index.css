@@ -24,7 +24,7 @@ body {
 #mode-contrainer {
   margin-top: 20px;
   width: 90%;
-  height: 200px;
+  height: 250px;
 }
 
 #history-contrainer {
@@ -41,12 +41,17 @@ body {
 
 #center {
   flex: 1;
-  width: 100vw;
+  width: 60;
   height: 100vh;
 }
 
 #chart {
-  height: 100vh;
+  height: 80vh;
+}
+
+#year-filter {
+  width: 50vw;
+  height: 20px;
 }
 
 /* ------------------------------------------------------------ right  ------------------------------------------------------------ */
@@ -74,6 +79,17 @@ body {
 
 #submit-btn {
   margin: 20px;
+}
+
+#number-filter {
+  display: flex;
+  width: 20vw;
+  flex-direction: row;
+  justify-content: space-around;
+}
+
+#txt-number-filter {
+  width: 8vw;
 }
 
 /* ------------------------------------------------------------ Modal  ------------------------------------------------------------ */
